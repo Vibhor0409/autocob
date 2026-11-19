@@ -692,7 +692,9 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                       <span className="fig">{current.primary.claimNumber}</span>
                     </dd>
                     <dd className="text-[12px] text-ink-2">
-                      Adjuster {current.primary.adjuster.name}, {current.primary.adjuster.phone}
+                      {current.primary.adjuster.name
+                        ? `Adjuster ${[current.primary.adjuster.name, current.primary.adjuster.phone].filter(Boolean).join(", ")}`
+                        : "No adjuster on file yet"}
                     </dd>
                   </div>
                   <div>
