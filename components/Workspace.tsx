@@ -42,6 +42,20 @@ function rank(cases: AccidentCase[], today: string): string[] {
     .map((x) => x.id);
 }
 
+/** HarnessRouter's free plan runs two tasks at a time; a busy answer is worth waiting out. */
+async function startTask(url: string, init: RequestInit, alive: () => boolean, onBusy: () => void) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, init);
+    const body = await res.json();
+    if (res.ok) return body.task as string;
+    if ((res.status !== 429 && res.status !== 409) || attempt >= 5 || !alive()) {
+      throw new Error(body.message ?? "The request could not be sent.");
+    }
+    onBusy();
+    await sleep(20_000);
+  }
+}
+
 async function pollTask(task: string, alive: () => boolean) {
   for (let i = 0; alive(); i++) {
     await sleep(i < 20 ? 3000 : 8000);
@@ -145,10 +159,10 @@ export function Workspace() {
         form.set("file", file);
         form.set("case", JSON.stringify(caseSummary(c)));
         if (c.agentThread) form.set("thread", c.agentThread);
-        const res = await fetch("/api/agent/read", { method: "POST", body: form });
-        const started = await res.json();
-        if (!res.ok) throw new Error(started.message ?? "The document could not be sent.");
-        const view = await pollTask(started.task, alive);
+        const task = await startTask("/api/agent/read", { method: "POST", body: form }, alive, () =>
+          setReading({ phase: "working", fileName: file.name, note: "The case agent is finishing another task. This one starts in a moment." }),
+        );
+        const view = await pollTask(task, alive);
         if (!view || !alive()) return;
         if (view.status !== "done" || !view.extraction) throw new Error(view.message ?? "The agent could not read this document.");
         setReading({
@@ -254,7 +268,7 @@ export function Workspace() {
       let thread = c.agentThread;
       if (withAgentLetter) {
         const open = ledger.lines.filter((l) => l.status === "ready_for_secondary");
-        const res = await fetch("/api/agent/letter", {
+        const task = await startTask("/api/agent/letter", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -270,10 +284,10 @@ export function Workspace() {
               enclosures: ["Visit ledger", ...enclosures.map((e) => e.name)],
             },
           }),
-        });
-        const started = await res.json();
-        if (!res.ok) throw new Error(started.message ?? "The letter request could not be sent.");
-        const view = await pollTask(started.task, alive);
+        }, alive, () =>
+          setPacket({ busy: true, note: "The case agent is finishing another task. The letter starts in a moment." }),
+        );
+        const view = await pollTask(task, alive);
         if (!view || !alive()) return;
         if (view.status !== "done" || !view.letter) throw new Error(view.message ?? "The agent could not draft the letter.");
         letter = view.letter;

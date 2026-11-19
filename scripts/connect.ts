@@ -57,7 +57,31 @@ try {
   if (harness) {
     console.log(`Reusing the existing Harness "${NAME}".`);
     if (harness.systemPrompt?.trim() !== instructions.trim()) {
-      console.log("Note: its instructions differ from harness-instructions.txt. It was left as it is.");
+      if (process.argv.includes("--update")) {
+        // PUT replaces every field, so the body is rebuilt from the live Harness plus the new instructions.
+        const live = await hr.getHarness(harness.id);
+        harness = await hr.replaceHarness(
+          harness.id,
+          {
+            name: live.harness.name,
+            base: live.harness.base,
+            default_model: live.harness.defaultModel,
+            system_prompt: instructions,
+            mcp_servers: live.harness.mcpServers,
+            skills: live.harness.skills,
+            plugins: live.harness.plugins,
+            additional_headers: live.harness.additionalHeaders,
+            env: live.harness.env,
+            max_step: live.harness.maxStep,
+            timeout_seconds: live.harness.timeoutSeconds,
+            max_cost_usd: live.harness.maxCostUsd,
+          },
+          live.etag,
+        );
+        console.log("Updated its instructions from harness-instructions.txt.");
+      } else {
+        console.log("Note: its instructions differ from harness-instructions.txt. Run with --update to apply them.");
+      }
     }
   } else {
     const { bases } = await hr.bases();
