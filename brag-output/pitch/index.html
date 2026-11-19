@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>AutoCOB pitch</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Schibsted Grotesk";
+        src: url("assets/fonts/schibsted-grotesk.woff2") format("woff2");
+        font-weight: 400 900;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "Spline Sans Mono";
+        src: url("assets/fonts/spline-sans-mono.woff2") format("woff2");
+        font-weight: 300 700;
+        font-style: normal;
+      }
+      :root {
+        --paper: #eef5f5;
+        --ink: #10222c;
+        --ink-2: #33475a;
+        --brand: #0c8a7b;
+        --brand-deep: #0a6a73;
+        --red: #c4122f;
+        --paid: #1c7557;
+        --blue: #1f5fa8;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--paper); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; color: var(--ink); font-family: "Schibsted Grotesk", sans-serif; }
+      #wash {
+        position: absolute; inset: 0;
+        background:
+          radial-gradient(1100px 700px at -6% -8%, rgba(74, 201, 176, 0.42), transparent 62%),
+          radial-gradient(1000px 680px at 106% 2%, rgba(104, 170, 236, 0.36), transparent 64%),
+          radial-gradient(900px 600px at 50% 118%, rgba(120, 214, 196, 0.3), transparent 62%), var(--paper);
+      }
+      .clip { position: absolute; inset: 0; }
+      .inner { position: absolute; inset: 0; padding: 100px 140px; display: flex; flex-direction: column; justify-content: center; }
+      .fig { font-family: "Spline Sans Mono", monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+      .eyebrow { font-size: 32px; font-weight: 700; color: var(--brand-deep); margin-bottom: 28px; }
+      .glass {
+        background: rgba(255, 255, 255, 0.78);
+        border: 2px solid rgba(255, 255, 255, 0.95);
+        border-radius: 32px;
+        box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.9), 0 30px 70px -34px rgba(12, 90, 100, 0.5);
+      }
+      .source { margin-top: 40px; font-size: 28px; color: var(--ink-2); }
+
+      /* 1 hook */
+      .hook { font-size: 84px; line-height: 1.08; font-weight: 800; letter-spacing: -0.035em; max-width: 1640px; }
+      #bar-card { margin-top: 56px; padding: 44px 48px 40px; width: 1640px; }
+      #bar { position: relative; height: 84px; border-radius: 16px; background: #dde8ea; overflow: hidden; display: flex; }
+      #bar-auto { width: 1150px; height: 100%; background: var(--paid); transform-origin: left center; }
+      #bar-stuck { width: 394px; height: 100%; background: repeating-linear-gradient(135deg, var(--red) 0 12px, #f3c5cd 12px 24px); transform-origin: left center; }
+      #bar-labels { margin-top: 22px; display: flex; font-size: 32px; font-weight: 600; }
+      #lab-auto { width: 1150px; color: var(--paid); }
+      #lab-stuck { color: var(--red); white-space: nowrap; }
+      #hook-2 { margin-top: 52px; font-size: 76px; font-weight: 800; letter-spacing: -0.03em; color: var(--red); }
+
+      /* 2 money */
+      .row { display: flex; gap: 44px; align-items: stretch; }
+      .stat { padding: 50px 56px; flex: 1; }
+      .stat .num { font-size: 190px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--brand-deep); }
+      .stat .num.red { color: var(--red); }
+      .stat p { margin-top: 26px; font-size: 44px; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; }
+
+      /* 4 who */
+      #logo-row { display: flex; align-items: center; gap: 34px; font-size: 150px; font-weight: 800; letter-spacing: -0.04em; }
+      #logo-mark { width: 150px; height: 150px; display: grid; place-items: center; border-radius: 36px; color: #fff; font-size: 110px; font-weight: 700; background: linear-gradient(160deg, #19b09c, var(--brand-deep)); box-shadow: 0 26px 50px -22px rgba(10, 106, 115, 0.9); }
+      #logo-row .cob { color: var(--brand); }
+      #tagline { margin-top: 36px; font-size: 62px; font-weight: 700; letter-spacing: -0.025em; }
+      #chips { margin-top: 44px; display: flex; gap: 26px; }
+      .chip { padding: 22px 38px; font-size: 38px; font-weight: 600; border-radius: 22px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="pitch" data-start="0" data-duration="30" data-width="1920" data-height="1080">
+      <div id="wash"></div>
+
+      <section id="s1" class="clip" data-start="0" data-duration="10.5" data-track-index="0">
+        <div class="inner">
+          <div class="hook" id="hook-1">After a car accident, auto insurance pays the clinic first.</div>
+          <div class="glass" id="bar-card">
+            <div id="bar"><div id="bar-auto"></div><div id="bar-stuck"></div></div>
+            <div id="bar-labels"><div id="lab-auto">Auto benefit, used up</div><div id="lab-stuck">Health plan must take over</div></div>
+          </div>
+          <div id="hook-2">That handoff is where clinics lose money.</div>
+        </div>
+      </section>
+
+      <section id="s2" class="clip" data-start="10.5" data-duration="8.35" data-track-index="0">
+        <div class="inner">
+          <div class="eyebrow" id="m-eyebrow">What denied claims cost providers each year</div>
+          <div class="row">
+            <div class="glass stat" id="m-1">
+              <div class="num">$25.7B</div>
+              <p>spent fighting denied claims</p>
+            </div>
+            <div class="glass stat" id="m-2">
+              <div class="num red">$18B</div>
+              <p>of it on claims that should have been paid</p>
+            </div>
+          </div>
+          <div class="source" id="m-src">Source: Premier Inc. national provider survey, 2025</div>
+        </div>
+      </section>
+
+      <section id="s3" class="clip" data-start="18.85" data-duration="6.35" data-track-index="0">
+        <div class="inner">
+          <div class="eyebrow" id="n-eyebrow">Providers are asking for help</div>
+          <div class="row">
+            <div class="glass stat" id="n-1">
+              <div class="num">82%</div>
+              <p>say cutting denials is a priority</p>
+            </div>
+            <div class="glass stat" id="n-2">
+              <div class="num red">14%</div>
+              <p>use AI to manage denials today</p>
+            </div>
+          </div>
+          <div class="source" id="n-src">Source: Experian Health, State of Claims 2025</div>
+        </div>
+      </section>
+
+      <section id="s4" class="clip" data-start="25.2" data-duration="4.8" data-track-index="0">
+        <div class="inner">
+          <div id="logo-row"><div id="logo-mark">+</div><div>Auto<span class="cob">COB</span></div></div>
+          <div id="tagline">The agent for billing teams who work accident claims</div>
+          <div id="chips">
+            <div class="glass chip" id="chip-1">Accident billing companies</div>
+            <div class="glass chip" id="chip-2">PT, orthopedic and chiropractic groups</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const rise = (sel, at, d = 0.6) => tl.fromTo(sel, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: d, ease: "power3.out" }, at);
+      const leave = (sel, at) => tl.to(sel, { opacity: 0, duration: 0.3, ease: "power1.in" }, at);
+
+      // 1 hook: 0 to 10.5
+      tl.fromTo("#hook-1", { y: 0, opacity: 1 }, { y: 0, opacity: 1, duration: 0.1 }, 0);
+      rise("#bar-card", 0.5);
+      tl.fromTo("#bar-auto", { scaleX: 0 }, { scaleX: 1, duration: 2.6, ease: "power2.inOut" }, 1.0);
+      tl.fromTo("#lab-auto", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 3.4);
+      tl.fromTo("#bar-stuck", { scaleX: 0 }, { scaleX: 1, duration: 1.3, ease: "power2.out" }, 4.3);
+      tl.fromTo("#lab-stuck", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 4.9);
+      rise("#hook-2", 7.6);
+      leave("#s1 .inner", 10.2);
+
+      // 2 money: 10.5 to 18.85
+      rise("#m-eyebrow", 10.55, 0.45);
+      rise("#m-1", 10.8);
+      rise("#m-2", 15.4);
+      tl.fromTo("#m-src", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 11.4);
+      leave("#s2 .inner", 18.55);
+
+      // 3 need: 18.85 to 25.2
+      rise("#n-eyebrow", 18.9, 0.45);
+      rise("#n-1", 19.1);
+      rise("#n-2", 22.0);
+      tl.fromTo("#n-src", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 19.7);
+      leave("#s3 .inner", 24.9);
+
+      // 4 who: 25.2 to 30
+      tl.fromTo("#logo-row", { scale: 0.92, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6, ease: "back.out(1.6)" }, 25.25);
+      rise("#tagline", 25.7);
+      rise("#chip-1", 26.5, 0.5);
+      rise("#chip-2", 26.8, 0.5);
+      leave("#s4 .inner", 29.72);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["pitch"] = tl;
+    </script>
+  </body>
+</html>
