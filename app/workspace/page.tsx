@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { Workspace } from "@/components/Workspace";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Workspace: AutoCOB" };
-
-export default function WorkspacePage() {
-  return <Workspace />;
+// The demo used to live here; old links keep working.
+export default function WorkspaceRedirect() {
+  redirect("/demo");
 }

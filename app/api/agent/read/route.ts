@@ -1,4 +1,5 @@
 import { plainError, startTask } from "@/lib/server/agent";
+import { json, requireSession, spendAgentRun } from "@/lib/server/auth";
 import { buildFacts } from "@/lib/server/facts";
 
 export const maxDuration = 60;
@@ -7,6 +8,8 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED = new Set(["application/pdf", "image/png", "image/jpeg"]);
 
 export async function POST(request: Request) {
+  const session = await requireSession({ write: true });
+  if (session instanceof Response) return session;
   let form: FormData;
   try {
     form = await request.formData();
@@ -37,8 +40,12 @@ export async function POST(request: Request) {
   const thread = form.get("thread");
   const safeName = file.name.replace(/[\r\n]+/g, " ").slice(0, 120);
 
+  if (!(await spendAgentRun(session, "READ_DOCUMENT"))) {
+    return json({ message: "This workspace has used today's agent allowance. It resets within 24 hours." }, 402);
+  }
   try {
     const task = await startTask({
+      user: session.user.id,
       job: "READ_DOCUMENT",
       facts: `${facts.text}\nAttached file: ${safeName}`,
       file,

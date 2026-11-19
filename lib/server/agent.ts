@@ -17,7 +17,6 @@ import {
 } from "./harnessrouter";
 import type { Extraction } from "../types";
 
-const WORKSPACE_USER = "autocob-demo-clinic"; // one shared demo workspace; replace with the signed-in staff id
 const LIMITS = { maxStep: 60, timeoutSeconds: 600, maxCostUsd: 1 };
 
 export type Job = "READ_DOCUMENT" | "WRITE_LETTER";
@@ -101,6 +100,8 @@ export interface StartArgs {
   file?: File;
   /** Continue this case's existing agent session when present. */
   thread?: string;
+  /** The signed-in staff member's id, from the session. */
+  user: string;
 }
 
 export async function startTask(a: StartArgs): Promise<string> {
@@ -117,7 +118,7 @@ export async function startTask(a: StartArgs): Promise<string> {
   const res = await hr.startBackground({
     harnessId: harness,
     input: [{ role: "user", content }],
-    user: WORKSPACE_USER,
+    user: a.user,
     previousResponseId: prior?.r,
     sessionId: prior?.s,
     idempotencyKey: randomUUID(),

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Ledger } from "@/lib/ledger.ts";
-import type { AccidentCase, CoverageType } from "@/lib/types";
+import type { AccidentCase } from "@/lib/types";
 
 /** Where a case stands. These four stages always happen in this order, so they are numbered. */
 export function CaseSteps({ c, ledger }: { c: AccidentCase; ledger: Ledger }) {
@@ -126,117 +126,5 @@ export function AddVisit({ today, onAdd }: { today: string; onAdd: (date: string
         </p>
       )}
     </form>
-  );
-}
-
-export function NewCase({ clinic, today, onCreate }: { clinic: string; today: string; onCreate: (c: AccidentCase) => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [error, setError] = useState("");
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => dialog.current?.showModal()}
-        className="rounded border border-line px-2.5 py-1 text-[12px] hover:border-ink"
-      >
-        New case
-      </button>
-      <dialog ref={dialog} className="m-auto w-[min(34rem,calc(100vw-2rem))] rounded-md border border-line bg-sheet p-0 text-ink backdrop:bg-ink/40">
-        <form
-          className="p-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            const get = (k: string) => String(f.get(k) ?? "").trim();
-            const limit = dollarsToCents(get("limit"));
-            const days = Number(get("days"));
-            if (!get("patient") || !get("carrier") || !get("claim") || !get("payer")) return setError("Fill in the patient, carrier, claim number and health plan.");
-            if (limit === null) return setError("Enter the policy limit in dollars, for example 10000.");
-            if (!Number.isInteger(days) || days < 30 || days > 730) return setError("Filing window must be between 30 and 730 days.");
-            onCreate({
-              id: `case-${Date.now()}`,
-              patient: { name: get("patient"), dob: "" },
-              clinic,
-              injuryDate: get("injury") || today,
-              accident: "Auto accident",
-              primary: {
-                carrier: get("carrier"),
-                coverage: get("coverage") as CoverageType,
-                claimNumber: get("claim"),
-                limitCents: limit,
-                adjuster: { name: "Not assigned yet", phone: "", email: "" },
-                claimVerified: false,
-              },
-              secondary: { payer: get("payer"), memberId: get("member"), timelyFilingDays: days },
-              visits: [],
-              payments: [],
-              documents: [],
-              timeline: [{ id: `t-${Date.now()}`, date: today, by: "staff", text: "Case opened." }],
-            });
-            setError("");
-            e.currentTarget.reset();
-            dialog.current?.close();
-          }}
-        >
-          <h2 className="text-lg font-semibold">New accident case</h2>
-          <p className="mt-1 text-[13px] text-ink-2">Demo workspace: use made-up details, not a real patient.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-[12px] text-ink-2">
-              Patient name
-              <input name="patient" required className={field} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Date of accident
-              <input name="injury" type="date" max={today} defaultValue={today} className={field} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Auto or workers&apos; comp carrier
-              <input name="carrier" required className={field} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Coverage
-              <select name="coverage" className={field} defaultValue="PIP">
-                <option value="PIP">PIP</option>
-                <option value="MedPay">MedPay</option>
-                <option value="WorkersComp">Workers&apos; comp</option>
-              </select>
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Claim number
-              <input name="claim" required className={`${field} fig`} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Policy limit ($)
-              <input name="limit" inputMode="decimal" placeholder="10000" required className={`${field} fig`} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Health plan
-              <input name="payer" required className={field} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Member ID
-              <input name="member" className={`${field} fig`} />
-            </label>
-            <label className="text-[12px] text-ink-2">
-              Health plan filing window (days)
-              <input name="days" inputMode="numeric" defaultValue="180" required className={`${field} fig`} />
-            </label>
-          </div>
-          {error && (
-            <p role="alert" className="mt-3 text-[13px] text-form-red">
-              {error}
-            </p>
-          )}
-          <div className="mt-5 flex gap-2">
-            <button type="submit" className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
-              Open case
-            </button>
-            <button type="button" onClick={() => dialog.current?.close()} className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
-              Cancel
-            </button>
-          </div>
-        </form>
-      </dialog>
-    </>
   );
 }

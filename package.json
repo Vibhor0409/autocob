@@ -8,9 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "connect": "node scripts/connect.ts",
+    "migrate": "node scripts/migrate.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "test": "node --test lib/ledger.test.ts lib/apply.test.ts && node scripts/check-packet.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "next": "16.4.6",
     "pdf-lib": "^1.17.1",
     "react": "19.3.0",

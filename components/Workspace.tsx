@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BenefitBar } from "./BenefitBar";
-import { AddVisit, CaseSteps, Glossary, NewCase } from "./CaseParts";
+import { CaseDialog, RecordPayment } from "./CaseForms";
+import { AddVisit, CaseSteps, Glossary } from "./CaseParts";
+import { demoStore, liveStore, SignedOutError, type CaseStore } from "@/lib/case-store.ts";
 import { SAMPLE_DOCS, sampleReading } from "@/lib/sample-readings.ts";
 import { KIND_LABEL, proposeChanges, type Proposal } from "@/lib/apply.ts";
 import { computeLedger, formatUsd, type Ledger, type VisitStatus } from "@/lib/ledger.ts";
 import { buildPacket, type Enclosure } from "@/lib/packet.ts";
-import { getFile, loadCases, putFile, resetCases, saveCases } from "@/lib/store.ts";
 import type { AccidentCase, Extraction } from "@/lib/types";
 
 const STATUS: Record<VisitStatus, { label: string; cls: string }> = {
@@ -24,7 +25,7 @@ const GUIDE_KEY = "autocob.guide.dismissed";
 type Reading =
   | { phase: "idle" }
   | { phase: "working"; fileName: string; note: string }
-  | { phase: "review"; fileName: string; bytes: Uint8Array; extraction: Extraction; proposal: Proposal; thread?: string; sample: boolean }
+  | { phase: "review"; fileName: string; bytes: Uint8Array; contentType: string; extraction: Extraction; proposal: Proposal; thread?: string; sample: boolean }
   | { phase: "error"; message: string };
 
 const localToday = () => {
@@ -68,7 +69,36 @@ async function pollTask(task: string, alive: () => boolean) {
   return null;
 }
 
-export function Workspace() {
+interface Me {
+  user: { name: string; email: string };
+  workspace: { name: string };
+  agent: { connected: boolean; usedToday: number; dailyLimit: number };
+}
+
+type Filter = "all" | "action" | "waiting" | "done";
+
+const FILTERS: Array<[Filter, string]> = [
+  ["all", "All"],
+  ["action", "Needs action"],
+  ["waiting", "Waiting"],
+  ["done", "Done"],
+];
+
+function bucket(l: Ledger): Filter {
+  if (l.nextAction.kind === "none") return l.exhausted ? "done" : "waiting";
+  return "action";
+}
+
+function toCsv(rows: string[][]): string {
+  return rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+}
+
+export function Workspace({ mode }: { mode: "demo" | "live" }) {
+  const store: CaseStore = useMemo(() => (mode === "live" ? liveStore() : demoStore()), [mode]);
+  const [me, setMe] = useState<Me | null>(null);
+  const [notice, setNotice] = useState("");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
   const [cases, setCases] = useState<AccidentCase[] | null>(null);
   const [today, setToday] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -82,27 +112,47 @@ export function Workspace() {
   const run = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    // Browser storage and the clock only exist after mount, so the first paint is the shell.
-    void Promise.resolve().then(() => {
-      const loaded = loadCases();
-      const now = localToday();
-      const ids = rank(loaded, now);
-      setCases(loaded);
-      setToday(now);
-      setOrder(ids);
-      setSelectedId(ids[0] ?? "");
-      try {
-        setGuide(localStorage.getItem(GUIDE_KEY) !== "1");
-      } catch {
-        setGuide(true);
-      }
-    });
-    fetch("/api/agent/health", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setConnected(Boolean(j.connected)))
-      .catch(() => setConnected(false));
+  const signedOut = useCallback(() => {
+    window.location.assign("/login");
   }, []);
+
+  useEffect(() => {
+    // Browser storage, the clock and the session only exist after mount, so the first paint is the shell.
+    let alive = true;
+    (async () => {
+      try {
+        if (mode === "live") {
+          const res = await fetch("/api/me", { cache: "no-store" });
+          if (res.status === 401) return signedOut();
+          const body = (await res.json()) as Me;
+          if (!alive) return;
+          setMe(body);
+          setConnected(Boolean(body.agent?.connected));
+        } else {
+          setConnected(false);
+        }
+        const loaded = await store.load();
+        if (!alive) return;
+        const now = localToday();
+        const ids = rank(loaded, now);
+        setCases(loaded);
+        setToday(now);
+        setOrder(ids);
+        setSelectedId(ids[0] ?? "");
+        try {
+          setGuide(localStorage.getItem(GUIDE_KEY) !== "1");
+        } catch {
+          setGuide(true);
+        }
+      } catch (err) {
+        if (err instanceof SignedOutError) return signedOut();
+        if (alive) setNotice("The workspace could not be loaded. Check your connection and reload.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [mode, store, signedOut]);
 
   const ledgers = useMemo(() => {
     const m = new Map<string, Ledger>();
@@ -128,13 +178,29 @@ export function Workspace() {
     setShowDraft(false);
   };
 
-  const update = useCallback((next: AccidentCase) => {
-    setCases((prev) => {
-      const all = (prev ?? []).map((c) => (c.id === next.id ? next : c));
-      saveCases(all);
-      return all;
-    });
+  const replaceCase = useCallback((next: AccidentCase) => {
+    setCases((prev) => (prev ?? []).map((c) => (c.id === next.id ? next : c)));
   }, []);
+
+  // Changes show at once and are saved behind them; a failed save says so instead of pretending.
+  const update = useCallback(
+    (next: AccidentCase) => {
+      replaceCase(next);
+      store
+        .save(next)
+        .then((r) => {
+          if (r.conflict) {
+            replaceCase(r.conflict);
+            setNotice("A teammate changed this case at the same time. Their version is shown; redo your last change if it is missing.");
+          }
+        })
+        .catch((err) => {
+          if (err instanceof SignedOutError) return signedOut();
+          setNotice("Your last change was not saved. Check your connection, then reload to see what is stored.");
+        });
+    },
+    [replaceCase, store, signedOut],
+  );
 
   const caseSummary = (c: AccidentCase) => ({
     caseId: c.id,
@@ -162,6 +228,7 @@ export function Workspace() {
         const task = await startTask("/api/agent/read", { method: "POST", body: form }, alive, () =>
           setReading({ phase: "working", fileName: file.name, note: "The case agent is finishing another task. This one starts in a moment." }),
         );
+        setMe((m) => (m ? { ...m, agent: { ...m.agent, usedToday: m.agent.usedToday + 1 } } : m));
         const view = await pollTask(task, alive);
         if (!view || !alive()) return;
         if (view.status !== "done" || !view.extraction) throw new Error(view.message ?? "The agent could not read this document.");
@@ -169,6 +236,7 @@ export function Workspace() {
           phase: "review",
           fileName: file.name,
           bytes,
+          contentType: file.type || "application/pdf",
           extraction: view.extraction,
           proposal: proposeChanges(c, view.extraction, file.name, today),
           thread: view.thread,
@@ -182,7 +250,7 @@ export function Workspace() {
         setReading({ phase: "working", fileName: file.name, note: "Loading the sample reading." });
         await sleep(900);
         if (!alive()) return;
-        setReading({ phase: "review", fileName: file.name, bytes, extraction: sample, proposal: proposeChanges(c, sample, file.name, today), sample: true });
+        setReading({ phase: "review", fileName: file.name, bytes, contentType: file.type || "application/pdf", extraction: sample, proposal: proposeChanges(c, sample, file.name, today), sample: true });
       }
     } catch (err) {
       if (alive()) setReading({ phase: "error", message: err instanceof Error ? err.message : "Something went wrong reading the document." });
@@ -193,9 +261,12 @@ export function Workspace() {
     if (reading.phase !== "review" || !current) return;
     const next = { ...reading.proposal.next, agentThread: reading.thread ?? current.agentThread };
     const doc = next.documents[next.documents.length - 1];
-    if (doc) await putFile(doc.id, reading.bytes);
     update(next);
     setReading({ phase: "idle" });
+    if (doc) {
+      const file = new File([reading.bytes as BlobPart], doc.name, { type: reading.contentType });
+      store.putFile(next.id, doc.id, file).catch(() => setNotice(`${doc.name} was read and applied, but the file itself could not be stored. Upload it again to keep a copy.`));
+    }
   }
 
   async function trySample(file: string) {
@@ -213,13 +284,79 @@ export function Workspace() {
   }
 
   function createCase(c: AccidentCase) {
-    setCases((prev) => {
-      const all = [...(prev ?? []), c];
-      saveCases(all);
-      return all;
-    });
+    setCases((prev) => [...(prev ?? []), c]);
     setOrder((prev) => [c.id, ...prev]);
     select(c.id);
+    store.create(c).catch((err) => {
+      if (err instanceof SignedOutError) return signedOut();
+      setCases((prev) => (prev ?? []).filter((x) => x.id !== c.id));
+      setNotice(err instanceof Error ? err.message : "The case could not be created.");
+    });
+  }
+
+  function deleteCase() {
+    if (!current) return;
+    if (!window.confirm(`Delete the case for ${current.patient.name}? Its visits, payments and stored documents are removed for everyone. This cannot be undone.`)) return;
+    const id = current.id;
+    const rest = (cases ?? []).filter((c) => c.id !== id);
+    setCases(rest);
+    select(order.find((x) => x !== id && rest.some((c) => c.id === x)) ?? "");
+    store.remove(id).catch(() => setNotice("The case could not be deleted. Reload to see what is stored."));
+  }
+
+  function recordPayment(p: { date: string; cents: number; visitId?: string; payee?: string }) {
+    if (!current) return;
+    const next = structuredClone(current);
+    next.payments.push({
+      id: uid("pay"),
+      date: p.date,
+      amountCents: p.cents,
+      payee: p.visitId ? next.clinic || "This clinic" : (p.payee ?? "Other provider"),
+      source: "Entered by staff",
+      ...(p.visitId ? { visitId: p.visitId } : {}),
+    });
+    next.timeline.push({
+      id: uid("t"),
+      date: today,
+      by: "staff",
+      text: `Carrier payment of ${formatUsd(p.cents)} recorded${p.visitId ? "" : ` to ${p.payee}`}.`,
+    });
+    update(next);
+  }
+
+  async function addSamples() {
+    try {
+      const all = await store.addSamples();
+      const ids = rank(all, today);
+      setCases(all);
+      setOrder(ids);
+      select(ids[0] ?? "");
+    } catch (err) {
+      if (err instanceof SignedOutError) return signedOut();
+      setNotice(err instanceof Error ? err.message : "The practice cases could not be added.");
+    }
+  }
+
+  function exportCsv() {
+    const rows = [["Patient reference", "Carrier", "Coverage", "Claim number", "Limit", "Remaining", "Stuck (no letter)", "Ready for health plan", "Next step", "Earliest file-by date"]];
+    for (const c of cases ?? []) {
+      const l = ledgers.get(c.id);
+      if (!l) continue;
+      const open = l.lines.filter((x) => x.status === "ready_for_secondary" || x.status === "blocked_no_letter");
+      const earliest = open.map((x) => x.filingDeadline).sort()[0] ?? "";
+      rows.push([c.patient.name, c.primary.carrier, c.primary.coverage, c.primary.claimNumber, formatUsd(l.limitCents), formatUsd(l.remainingCents), formatUsd(l.blockedCents), formatUsd(l.secondaryBalanceCents - l.blockedCents), l.nextAction.title, earliest]);
+    }
+    const url = URL.createObjectURL(new Blob([toCsv(rows)], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `autocob-worklist-${today}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    window.location.assign("/");
   }
 
   function dismissGuide() {
@@ -259,8 +396,7 @@ export function Workspace() {
       const enclosures: Enclosure[] = [];
       const missing: string[] = [];
       for (const d of wanted) {
-        let bytes = await getFile(d.id);
-        if (!bytes && d.sampleUrl) bytes = new Uint8Array(await (await fetch(d.sampleUrl)).arrayBuffer());
+        const bytes = await store.getFile(d);
         if (bytes) enclosures.push({ name: `${KIND_LABEL[d.kind]}: ${d.name}`, bytes });
         else missing.push(d.name);
       }
@@ -287,6 +423,7 @@ export function Workspace() {
         }, alive, () =>
           setPacket({ busy: true, note: "The case agent is finishing another task. The letter starts in a moment." }),
         );
+        setMe((m) => (m ? { ...m, agent: { ...m.agent, usedToday: m.agent.usedToday + 1 } } : m));
         const view = await pollTask(task, alive);
         if (!view || !alive()) return;
         if (view.status !== "done" || !view.letter) throw new Error(view.message ?? "The agent could not draft the letter.");
@@ -330,6 +467,20 @@ export function Workspace() {
   }
 
   const stuckTotal = [...ledgers.values()].reduce((t, l) => t + l.blockedCents, 0);
+  const readyTotal = [...ledgers.values()].reduce((t, l) => t + l.secondaryBalanceCents - l.blockedCents, 0);
+  const dueSoon = [...ledgers.values()].reduce(
+    (t, l) => t + l.lines.filter((x) => (x.status === "ready_for_secondary" || x.status === "blocked_no_letter") && x.daysToDeadline <= 30).length,
+    0,
+  );
+  const clinicName = me?.workspace.name ?? "Eastbay Motion Physical Therapy";
+  const q = query.trim().toLowerCase();
+  const visible = sorted.filter((c) => {
+    const l = ledgers.get(c.id);
+    if (!l) return false;
+    if (filter !== "all" && bucket(l) !== filter) return false;
+    return !q || `${c.patient.name} ${c.primary.carrier} ${c.primary.claimNumber} ${c.secondary.payer}`.toLowerCase().includes(q);
+  });
+  const hasSamples = (cases ?? []).some((c) => c.id === "alvarez");
   const filed = new Set(current?.documents.map((d) => d.name));
   const unusedSamples = SAMPLE_DOCS.filter((s) => s.forCase === current?.id && !filed.has(s.file));
   const misfiled = SAMPLE_DOCS.find((s) => s.forCase === "any");
@@ -340,35 +491,64 @@ export function Workspace() {
         <Link href="/" className="text-[17px] font-bold tracking-tight">
           Auto<span className="text-form-red">COB</span>
         </Link>
-        <span className="text-sm text-ink-2">Eastbay Motion Physical Therapy</span>
+        <span className="text-sm text-ink-2">{clinicName}</span>
         <span className="ml-auto flex items-center gap-2 text-[12px] text-ink-2">
           <span
             className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-paid" : connected === false ? "bg-wait" : "bg-line"}`}
             aria-hidden
           />
-          {connected === null ? "Checking the case agent" : connected ? "Case agent connected" : "Case agent not connected: sample readings only"}
+          {mode === "demo"
+            ? "Public demo: stored sample readings"
+            : connected === null
+              ? "Checking the case agent"
+              : connected
+                ? `Case agent connected${me ? `, ${me.agent.usedToday} of ${me.agent.dailyLimit} runs used today` : ""}`
+                : "Case agent not connected"}
         </span>
-        <button
-          type="button"
-          onClick={() => {
-            const fresh = resetCases();
-            const ids = rank(fresh, today);
-            setCases(fresh);
-            setOrder(ids);
-            select(ids[0]);
-          }}
-          className="rounded border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-ink hover:text-ink"
-        >
-          Reset sample data
-        </button>
-        <NewCase clinic="Eastbay Motion Physical Therapy" today={today} onCreate={createCase} />
+        {mode === "demo" ? (
+          <>
+            <button type="button" onClick={addSamples} className="rounded border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-ink hover:text-ink">
+              Reset sample data
+            </button>
+            <Link href="/signup" className="rounded bg-ink px-2.5 py-1 text-[12px] font-medium text-sheet hover:bg-ink/85">
+              Create a workspace
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link href="/app/team" className="rounded border border-line px-2.5 py-1 text-[12px] hover:border-ink">
+              Team
+            </Link>
+            <button type="button" onClick={signOut} className="rounded border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-ink hover:text-ink">
+              Sign out
+            </button>
+          </>
+        )}
+        <CaseDialog
+          clinic={clinicName}
+          today={today}
+          onSave={createCase}
+          label="New case"
+          labelClass="rounded border border-line px-2.5 py-1 text-[12px] hover:border-ink"
+        />
       </header>
 
       <div className="border-b border-line bg-wash-wait px-4 py-1.5 text-[12px] text-wait sm:px-6">
-        Demo workspace. Every patient, carrier and amount is fictional. Do not upload real patient records.
+        {mode === "demo"
+          ? "Public demo. Every patient, carrier and amount is fictional, and nothing you enter leaves this browser."
+          : "Use de-identified or test data only: case references instead of names, and no real patient documents, until your organisation has a signed data agreement."}
       </div>
 
-      {guide && (
+      {notice && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-b border-form-red/30 bg-wash-red px-4 py-2 text-sm text-form-red sm:px-6">
+          {notice}
+          <button type="button" onClick={() => setNotice("")} className="rounded border border-form-red/40 px-2.5 py-1 text-[12px] hover:border-form-red">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {guide && hasSamples && (
         <div className="border-b border-line bg-wash-plan px-4 py-3 text-sm sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="max-w-3xl">
@@ -389,16 +569,52 @@ export function Workspace() {
 
       <div className="grid flex-1 lg:grid-cols-[21rem_1fr]">
         <nav aria-label="Cases" className="border-b border-line bg-sheet lg:border-r lg:border-b-0">
-          <div className="flex items-baseline justify-between px-4 pt-4 pb-2 sm:px-5">
-            <h2 className="text-[13px] font-semibold">Open cases</h2>
-            {stuckTotal > 0 && (
-              <span className="text-[12px] text-form-red">
-                <span className="fig font-medium">{formatUsd(stuckTotal)}</span> stuck
-              </span>
-            )}
+          <dl className="grid grid-cols-3 gap-2 border-b border-line px-4 py-3 text-[12px] sm:px-5">
+            <div>
+              <dt className="text-ink-2">Stuck</dt>
+              <dd className={`fig text-sm font-medium ${stuckTotal > 0 ? "text-form-red" : ""}`}>{formatUsd(stuckTotal)}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-2">Ready to send</dt>
+              <dd className="fig text-sm font-medium text-plan">{formatUsd(readyTotal)}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-2">Due in 30 days</dt>
+              <dd className={`fig text-sm font-medium ${dueSoon > 0 ? "text-form-red" : ""}`}>{dueSoon} visits</dd>
+            </div>
+          </dl>
+          <div className="px-4 pt-3 sm:px-5">
+            <label className="sr-only" htmlFor="case-search">
+              Search cases
+            </label>
+            <input
+              id="case-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search patient, carrier or claim"
+              className="w-full rounded border border-line bg-sheet px-2.5 py-1.5 text-sm"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter cases">
+              {FILTERS.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={filter === key}
+                  onClick={() => setFilter(key)}
+                  className={`rounded px-2 py-1 text-[12px] ${filter === key ? "bg-ink text-sheet" : "border border-line text-ink-2 hover:border-ink"}`}
+                >
+                  {label}
+                </button>
+              ))}
+              <button type="button" onClick={exportCsv} disabled={cases.length === 0} className="ml-auto text-[12px] text-plan underline-offset-2 hover:underline disabled:opacity-40">
+                Export CSV
+              </button>
+            </div>
           </div>
-          <ul>
-            {sorted.map((c) => {
+          {cases.length > 0 && visible.length === 0 && <p className="px-4 py-4 text-sm text-ink-2 sm:px-5">No cases match. Clear the search or choose All.</p>}
+          <ul className="mt-2">
+            {visible.map((c) => {
               const l = ledgers.get(c.id)!;
               const active = c.id === selectedId;
               return (
@@ -429,11 +645,42 @@ export function Workspace() {
           </ul>
         </nav>
 
+        {cases.length === 0 && (
+          <main className="px-4 py-10 sm:px-8">
+            <div className="mx-auto max-w-xl">
+              <h1 className="text-2xl font-bold tracking-tight">No cases yet</h1>
+              <p className="mt-2 text-sm text-ink-2">
+                Open your first accident case with <span className="font-medium text-ink">New case</span>, or add four fictional
+                practice cases with sample carrier documents to see how the agent reads them.
+              </p>
+              <button type="button" onClick={addSamples} className="mt-5 rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+                Add practice cases
+              </button>
+            </div>
+          </main>
+        )}
+
         {current && ledger && (
           <main className="min-w-0 px-4 py-6 sm:px-8">
             <div className="mx-auto max-w-4xl space-y-6">
               <section>
-                <h1 className="text-2xl font-bold tracking-tight">{current.patient.name}</h1>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight">{current.patient.name}</h1>
+                  <div className="flex gap-2">
+                    <CaseDialog
+                      key={current.id}
+                      clinic={clinicName}
+                      today={today}
+                      existing={current}
+                      onSave={update}
+                      label="Edit details"
+                      labelClass="rounded border border-line bg-sheet px-2.5 py-1 text-[12px] hover:border-ink"
+                    />
+                    <button type="button" onClick={deleteCase} className="rounded border border-line bg-sheet px-2.5 py-1 text-[12px] text-form-red hover:border-form-red">
+                      Delete case
+                    </button>
+                  </div>
+                </div>
                 <p className="mt-1 text-sm text-ink-2">
                   {current.accident} on <span className="fig">{current.injuryDate}</span>
                 </p>
@@ -591,7 +838,10 @@ export function Workspace() {
                   </span>
                 </div>
                 <div className="flex flex-wrap px-5 pb-3 empty:hidden">
-                  <AddVisit key={current.id} today={today} onAdd={addVisit} />
+                  <div className="flex w-full flex-wrap gap-x-5 gap-y-2">
+                    <AddVisit key={current.id} today={today} onAdd={addVisit} />
+                    <RecordPayment key={`pay-${current.id}`} ledger={ledger} today={today} onAdd={recordPayment} />
+                  </div>
                 </div>
                 {ledger.lines.length === 0 && (
                   <p className="border-t border-line px-5 py-4 text-sm text-ink-2">
@@ -693,6 +943,10 @@ export function Workspace() {
                           </div>
                           {d.sampleUrl ? (
                             <a href={d.sampleUrl} target="_blank" rel="noreferrer" className="text-plan underline-offset-2 hover:underline">
+                              {d.name}
+                            </a>
+                          ) : mode === "live" ? (
+                            <a href={`/api/documents/${encodeURIComponent(d.id)}`} className="text-plan underline-offset-2 hover:underline">
                               {d.name}
                             </a>
                           ) : (
