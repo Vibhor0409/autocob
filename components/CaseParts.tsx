@@ -30,7 +30,7 @@ export function CaseSteps({ c, ledger }: { c: AccidentCase; ledger: Ledger }) {
           <li
             key={s.title}
             aria-current={isNow ? "step" : undefined}
-            className={`border-t-[3px] pt-2 ${isDone ? "border-paid" : isNow ? "border-ink" : "border-line"}`}
+            className={`border-t-[3px] pt-2 ${isDone ? "border-paid" : isNow ? "border-brand" : "border-line"}`}
           >
             <div className={`text-[13px] font-semibold ${isDone || isNow ? "" : "text-ink-2"}`}>
               <span className="fig mr-1.5 text-ink-2">{i + 1}</span>
@@ -57,7 +57,7 @@ const TERMS: Array<[string, string]> = [
 
 export function Glossary() {
   return (
-    <details className="rounded-md border border-line bg-sheet px-5 py-3 text-sm">
+    <details className="card px-5 py-3 text-sm">
       <summary className="cursor-pointer font-semibold">What the terms mean</summary>
       <dl className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2">
         {TERMS.map(([term, meaning]) => (
@@ -82,7 +82,7 @@ export function AddVisit({ today, onAdd }: { today: string; onAdd: (date: string
   const [error, setError] = useState("");
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-[13px] text-plan underline-offset-2 hover:underline">
+      <button type="button" onClick={() => setOpen(true)} className="link-action">
         Add a visit
       </button>
     );
@@ -114,10 +114,10 @@ export function AddVisit({ today, onAdd }: { today: string; onAdd: (date: string
         Service
         <input name="service" placeholder="Therapeutic exercise" className={field} />
       </label>
-      <button type="submit" className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+      <button type="submit" className="btn-primary px-3.5 py-2 text-sm font-medium">
         Add visit
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
+      <button type="button" onClick={() => setOpen(false)} className="btn-secondary px-3.5 py-2 text-sm">
         Cancel
       </button>
       {error && (

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Logo } from "@/components/Logo";
 
 const field = "mt-1 w-full rounded border border-line bg-sheet px-3 py-2 text-sm";
 
@@ -38,7 +39,7 @@ export function AuthForm({ kind, invite }: { kind: "login" | "signup"; invite?: 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-12">
       <Link href="/" className="text-[17px] font-bold tracking-tight">
-        Auto<span className="text-form-red">COB</span>
+        <Logo />
       </Link>
       <h1 className="mt-8 text-2xl font-bold tracking-tight">
         {signup ? (invite ? "Join your team's workspace" : "Create your workspace") : "Sign in"}
@@ -84,7 +85,7 @@ export function AuthForm({ kind, invite }: { kind: "login" | "signup"; invite?: 
             {error}
           </p>
         )}
-        <button type="submit" disabled={busy} className="w-full rounded bg-ink px-4 py-2.5 text-sm font-medium text-sheet hover:bg-ink/85 disabled:opacity-60">
+        <button type="submit" disabled={busy} className="w-full btn-primary px-4 py-2.5 text-sm font-medium disabled:opacity-60">
           {busy ? "One moment" : signup ? (invite ? "Join workspace" : "Create workspace") : "Sign in"}
         </button>
       </form>
@@ -93,14 +94,14 @@ export function AuthForm({ kind, invite }: { kind: "login" | "signup"; invite?: 
         {signup ? (
           <>
             Already have an account?{" "}
-            <Link href="/login" className="text-plan underline-offset-2 hover:underline">
+            <Link href="/login" className="link-action">
               Sign in
             </Link>
           </>
         ) : (
           <>
             New to AutoCOB?{" "}
-            <Link href="/signup" className="text-plan underline-offset-2 hover:underline">
+            <Link href="/signup" className="link-action">
               Create a workspace
             </Link>
           </>

@@ -186,7 +186,11 @@ function pickNextAction(c: AccidentCase, l: Omit<Ledger, "nextAction">): NextAct
       kind: "assemble_packet",
       title: "Send the secondary packet",
       detail: `${open.length} visit${open.length === 1 ? "" : "s"} totalling ${formatUsd(l.secondaryBalanceCents)} are ready for ${c.secondary.payer}.${
-        tight && soonest ? ` The earliest filing deadline is in ${soonest.daysToDeadline} days.` : ""
+        tight && soonest
+          ? soonest.daysToDeadline < 0
+            ? ` The earliest filing deadline passed ${-soonest.daysToDeadline} days ago.`
+            : ` The earliest filing deadline is in ${soonest.daysToDeadline} day${soonest.daysToDeadline === 1 ? "" : "s"}.`
+          : ""
       }`,
       urgent: tight,
     };

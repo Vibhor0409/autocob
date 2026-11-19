@@ -93,10 +93,16 @@ export function liveStore(): CaseStore {
   return {
     mode: "live",
     load,
-    async create(c) {
-      const { status, body } = await api<{ version?: number; message?: string }>("/api/cases", jsonInit("POST", { case: c }));
-      if (status !== 201) throw new Error(body.message ?? "The case could not be created.");
-      versions.set(c.id, body.version ?? 1);
+    create(c) {
+      // Queued like a save, so a change made straight after opening the case waits for the case to exist.
+      const run = async () => {
+        const { status, body } = await api<{ version?: number; message?: string }>("/api/cases", jsonInit("POST", { case: c }));
+        if (status !== 201) throw new Error(body.message ?? "The case could not be created.");
+        versions.set(c.id, body.version ?? 1);
+      };
+      const next = (queues.get(c.id) ?? Promise.resolve()).then(run, run);
+      queues.set(c.id, next.catch(() => undefined));
+      return next;
     },
     save(c) {
       const run = async (): Promise<SaveResult> => {

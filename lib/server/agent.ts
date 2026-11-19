@@ -241,7 +241,7 @@ export function plainError(err: unknown): { status: number; message: string } {
   }
   if (err instanceof HRError) {
     if (err.status === 429) return { status: 429, message: "The agent is busy. Try again in a minute." };
-    if (err.status === 402) return { status: 402, message: "The agent's usage credit has run out." };
+    if (err.status === 402) return { status: 402, message: "The case agent is out of usage credit, so it cannot read documents right now. Nothing was changed." };
     if (err.status === 409) return { status: 409, message: "The agent is still working on this case. Wait for it to finish." };
   }
   return { status: 502, message: "The agent could not be reached. Nothing was changed." };

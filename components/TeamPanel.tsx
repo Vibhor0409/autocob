@@ -52,7 +52,7 @@ export function TeamPanel() {
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-5 py-10">
-      <Link href="/app" className="text-sm text-plan underline-offset-2 hover:underline">
+      <Link href="/app" className="text-sm link-action">
         Back to the worklist
       </Link>
       <h1 className="mt-4 text-2xl font-bold tracking-tight">{me.workspace.name}</h1>
@@ -66,7 +66,7 @@ export function TeamPanel() {
         </p>
       )}
 
-      <section className="mt-8 rounded-md border border-line bg-sheet p-5">
+      <section className="mt-8 card p-5">
         <h2 className="font-semibold">People</h2>
         <ul className="mt-3 divide-y divide-line/70 text-sm">
           {me.members.map((m) => (
@@ -78,7 +78,7 @@ export function TeamPanel() {
             </li>
           ))}
         </ul>
-        <button type="button" onClick={createInvite} className="mt-4 rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+        <button type="button" onClick={createInvite} className="mt-4 btn-primary px-3.5 py-2 text-sm font-medium">
           Create an invite link
         </button>
         {invite && (
@@ -97,7 +97,7 @@ export function TeamPanel() {
                   setCopied(false);
                 }
               }}
-              className="mt-3 rounded border border-ink/30 bg-sheet px-3 py-1.5 text-sm hover:border-ink"
+              className="mt-3 btn-secondary px-3 py-1.5 text-sm"
             >
               {copied ? "Copied" : "Copy link"}
             </button>
@@ -105,7 +105,7 @@ export function TeamPanel() {
         )}
       </section>
 
-      <section className="mt-6 rounded-md border border-line bg-sheet p-5">
+      <section className="mt-6 card p-5">
         <h2 className="font-semibold">Case agent</h2>
         <p className="mt-2 text-sm text-ink-2">
           {me.agent.connected ? "Connected." : "Not connected."} {me.agent.usedToday} of {me.agent.dailyLimit} document reads
@@ -114,14 +114,14 @@ export function TeamPanel() {
       </section>
 
       {me.role === "owner" && (
-        <section className="mt-6 rounded-md border border-line bg-sheet p-5">
+        <section className="mt-6 card p-5">
           <h2 className="font-semibold">Workspace name</h2>
           <form onSubmit={rename} className="mt-3 flex flex-wrap gap-2">
             <label className="sr-only" htmlFor="ws-name">
               Workspace name
             </label>
             <input id="ws-name" name="name" required defaultValue={me.workspace.name} className="min-w-52 flex-1 rounded border border-line px-3 py-2 text-sm" />
-            <button type="submit" className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
+            <button type="submit" className="btn-secondary px-3.5 py-2 text-sm">
               Rename
             </button>
           </form>

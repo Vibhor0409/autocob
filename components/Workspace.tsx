@@ -11,6 +11,7 @@ import { KIND_LABEL, proposeChanges, type Proposal } from "@/lib/apply.ts";
 import { computeLedger, formatUsd, type Ledger, type VisitStatus } from "@/lib/ledger.ts";
 import { buildPacket, type Enclosure } from "@/lib/packet.ts";
 import type { AccidentCase, Extraction } from "@/lib/types";
+import { Logo } from "@/components/Logo";
 
 const STATUS: Record<VisitStatus, { label: string; cls: string }> = {
   paid_by_primary: { label: "Paid by carrier", cls: "bg-wash-paid text-paid" },
@@ -97,6 +98,12 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
   const store: CaseStore = useMemo(() => (mode === "live" ? liveStore() : demoStore()), [mode]);
   const [me, setMe] = useState<Me | null>(null);
   const [notice, setNotice] = useState("");
+  const [pending, setPending] = useState(0);
+  /** Wraps a save so the header can show it and the page can warn before leaving mid-save. */
+  const track = useCallback(<T,>(work: Promise<T>): Promise<T> => {
+    setPending((n) => n + 1);
+    return work.finally(() => setPending((n) => Math.max(0, n - 1)));
+  }, []);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [cases, setCases] = useState<AccidentCase[] | null>(null);
@@ -111,6 +118,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
   const [dragging, setDragging] = useState(false);
   const run = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  const readingCard = useRef<HTMLElement>(null);
 
   const signedOut = useCallback(() => {
     window.location.assign("/login");
@@ -154,6 +162,36 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
     };
   }, [mode, store, signedOut]);
 
+  // The reading card sits near the top of a long page; show it wherever the upload started from.
+  const showReading = useCallback(() => readingCard.current?.scrollIntoView({ behavior: "smooth", block: "center" }), []);
+  useEffect(() => {
+    if (reading.phase === "idle") return;
+    // Wait a beat: closing the file chooser returns focus to the upload button, which scrolls back to it.
+    const t = setTimeout(showReading, 350);
+    return () => clearTimeout(t);
+  }, [reading.phase, showReading]);
+
+  // A file dropped outside the drop area would otherwise make the browser leave the app.
+  useEffect(() => {
+    const stop = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => {
+      window.removeEventListener("dragover", stop);
+      window.removeEventListener("drop", stop);
+    };
+  }, []);
+
+  // Leaving while a save is still on its way would lose it, so the browser asks first.
+  useEffect(() => {
+    if (pending === 0) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
+
   const ledgers = useMemo(() => {
     const m = new Map<string, Ledger>();
     if (cases && today) for (const c of cases) m.set(c.id, computeLedger(c, today));
@@ -186,8 +224,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
   const update = useCallback(
     (next: AccidentCase) => {
       replaceCase(next);
-      store
-        .save(next)
+      track(store.save(next))
         .then((r) => {
           if (r.conflict) {
             replaceCase(r.conflict);
@@ -199,7 +236,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
           setNotice("Your last change was not saved. Check your connection, then reload to see what is stored.");
         });
     },
-    [replaceCase, store, signedOut],
+    [replaceCase, store, signedOut, track],
   );
 
   const caseSummary = (c: AccidentCase) => ({
@@ -212,9 +249,21 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
     limitCents: c.primary.limitCents,
   });
 
-  async function readDocument(file: File) {
+  async function readDocument(picked: File) {
     if (!current) return;
     const c = current;
+    // Some systems hand over a file with no type; the extension decides.
+    const ext = picked.name.toLowerCase().split(".").pop() ?? "";
+    const type = picked.type || { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" }[ext] || "";
+    if (!["application/pdf", "image/png", "image/jpeg"].includes(type)) {
+      setReading({ phase: "error", message: `${picked.name} is not a PDF, PNG or JPEG. Scan or export the document as a PDF and try again.` });
+      return;
+    }
+    if (picked.size > 10 * 1024 * 1024) {
+      setReading({ phase: "error", message: `${picked.name} is over 10 MB. Split it or scan at a lower resolution.` });
+      return;
+    }
+    const file = picked.type === type ? picked : new File([picked], picked.name, { type });
     const mine = ++run.current;
     const alive = () => run.current === mine;
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -253,7 +302,15 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
         setReading({ phase: "review", fileName: file.name, bytes, contentType: file.type || "application/pdf", extraction: sample, proposal: proposeChanges(c, sample, file.name, today), sample: true });
       }
     } catch (err) {
-      if (alive()) setReading({ phase: "error", message: err instanceof Error ? err.message : "Something went wrong reading the document." });
+      if (!alive()) return;
+      // A bundled practice document still works when the live agent cannot run; it is labelled as a stored reading.
+      const stored = sampleReading(file.name);
+      if (stored && connected) {
+        setReading({ phase: "review", fileName: file.name, bytes, contentType: file.type || "application/pdf", extraction: stored, proposal: proposeChanges(c, stored, file.name, today), sample: true });
+        setNotice(`The live agent could not run (${err instanceof Error ? err.message.replace(/\.$/, "") : "unavailable"}). Showing the stored reading for this practice document instead.`);
+        return;
+      }
+      setReading({ phase: "error", message: err instanceof Error ? err.message : "Something went wrong reading the document." });
     }
   }
 
@@ -265,7 +322,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
     setReading({ phase: "idle" });
     if (doc) {
       const file = new File([reading.bytes as BlobPart], doc.name, { type: reading.contentType });
-      store.putFile(next.id, doc.id, file).catch(() => setNotice(`${doc.name} was read and applied, but the file itself could not be stored. Upload it again to keep a copy.`));
+      track(store.putFile(next.id, doc.id, file)).catch(() => setNotice(`${doc.name} was read and applied, but the file itself could not be stored. Upload it again to keep a copy.`));
     }
   }
 
@@ -287,7 +344,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
     setCases((prev) => [...(prev ?? []), c]);
     setOrder((prev) => [c.id, ...prev]);
     select(c.id);
-    store.create(c).catch((err) => {
+    track(store.create(c)).catch((err) => {
       if (err instanceof SignedOutError) return signedOut();
       setCases((prev) => (prev ?? []).filter((x) => x.id !== c.id));
       setNotice(err instanceof Error ? err.message : "The case could not be created.");
@@ -301,7 +358,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
     const rest = (cases ?? []).filter((c) => c.id !== id);
     setCases(rest);
     select(order.find((x) => x !== id && rest.some((c) => c.id === x)) ?? "");
-    store.remove(id).catch(() => setNotice("The case could not be deleted. Reload to see what is stored."));
+    track(store.remove(id)).catch(() => setNotice("The case could not be deleted. Reload to see what is stored."));
   }
 
   function recordPayment(p: { date: string; cents: number; visitId?: string; payee?: string }) {
@@ -482,14 +539,15 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
   });
   const hasSamples = (cases ?? []).some((c) => c.id === "alvarez");
   const filed = new Set(current?.documents.map((d) => d.name));
+  const isPractice = SAMPLE_DOCS.some((s) => s.forCase === current?.id);
   const unusedSamples = SAMPLE_DOCS.filter((s) => s.forCase === current?.id && !filed.has(s.file));
-  const misfiled = SAMPLE_DOCS.find((s) => s.forCase === "any");
+  const misfiled = isPractice ? SAMPLE_DOCS.find((s) => s.forCase === "any") : undefined;
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-sheet px-4 py-3 sm:px-6">
+      <header className="glass sticky top-0 z-20 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/60 px-4 py-3 sm:px-6">
         <Link href="/" className="text-[17px] font-bold tracking-tight">
-          Auto<span className="text-form-red">COB</span>
+          <Logo />
         </Link>
         <span className="text-sm text-ink-2">{clinicName}</span>
         <span className="ml-auto flex items-center gap-2 text-[12px] text-ink-2">
@@ -505,21 +563,26 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                 ? `Case agent connected${me ? `, ${me.agent.usedToday} of ${me.agent.dailyLimit} runs used today` : ""}`
                 : "Case agent not connected"}
         </span>
+        {mode === "live" && (
+          <span className={`text-[12px] ${pending > 0 ? "font-medium text-wait" : "text-ink-2"}`} role="status">
+            {pending > 0 ? "Saving…" : "All changes saved"}
+          </span>
+        )}
         {mode === "demo" ? (
           <>
-            <button type="button" onClick={addSamples} className="rounded border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-ink hover:text-ink">
+            <button type="button" onClick={addSamples} className="btn-ghost">
               Reset sample data
             </button>
-            <Link href="/signup" className="rounded bg-ink px-2.5 py-1 text-[12px] font-medium text-sheet hover:bg-ink/85">
+            <Link href="/signup" className="btn-primary px-2.5 py-1 text-[12px] font-medium">
               Create a workspace
             </Link>
           </>
         ) : (
           <>
-            <Link href="/app/team" className="rounded border border-line px-2.5 py-1 text-[12px] hover:border-ink">
+            <Link href="/app/team" className="btn-ghost">
               Team
             </Link>
-            <button type="button" onClick={signOut} className="rounded border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-ink hover:text-ink">
+            <button type="button" onClick={signOut} className="btn-ghost">
               Sign out
             </button>
           </>
@@ -529,11 +592,11 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
           today={today}
           onSave={createCase}
           label="New case"
-          labelClass="rounded border border-line px-2.5 py-1 text-[12px] hover:border-ink"
+          labelClass="btn-ghost"
         />
       </header>
 
-      <div className="border-b border-line bg-wash-wait px-4 py-1.5 text-[12px] text-wait sm:px-6">
+      <div className="border-b border-white/60 bg-wash-wait/80 px-4 py-1.5 text-[12px] text-wait sm:px-6">
         {mode === "demo"
           ? "Public demo. Every patient, carrier and amount is fictional, and nothing you enter leaves this browser."
           : "Use de-identified or test data only: case references instead of names, and no real patient documents, until your organisation has a signed data agreement."}
@@ -549,7 +612,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
       )}
 
       {guide && hasSamples && (
-        <div className="border-b border-line bg-wash-plan px-4 py-3 text-sm sm:px-6">
+        <div className="border-b border-white/60 bg-wash-brand/80 px-4 py-3 text-sm sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="max-w-3xl">
               <p className="font-semibold">Try it in three clicks</p>
@@ -560,15 +623,41 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                 build the packet.
               </p>
             </div>
-            <button type="button" onClick={dismissGuide} className="rounded border border-plan/40 px-2.5 py-1 text-[12px] text-plan hover:border-plan">
+            <button type="button" onClick={dismissGuide} className="btn-ghost">
               Got it
             </button>
           </div>
         </div>
       )}
 
+      {reading.phase !== "idle" && (
+        <div className="card fixed right-4 bottom-4 left-4 z-30 flex items-center gap-3 px-4 py-3 text-sm sm:left-auto sm:max-w-md" role="status">
+          {reading.phase === "working" && <span className="spinner" aria-hidden />}
+          <span className="min-w-0 flex-1">
+            {reading.phase === "working" && (
+              <>
+                <span className="font-semibold">Reading {reading.fileName}</span>
+                <span className="block text-[12px] text-ink-2">Usually under a minute. You can keep working.</span>
+              </>
+            )}
+            {reading.phase === "review" && (
+              <>
+                <span className="font-semibold">{reading.proposal.blocked ? "This document was refused" : "Ready for you to check"}</span>
+                <span className="block truncate text-[12px] text-ink-2">{reading.fileName}</span>
+              </>
+            )}
+            {reading.phase === "error" && <span className="font-semibold text-form-red">The document could not be read</span>}
+          </span>
+          {reading.phase !== "working" && (
+            <button type="button" onClick={showReading} className="btn-primary px-3 py-1.5 text-[13px]">
+              Show
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="grid flex-1 lg:grid-cols-[21rem_1fr]">
-        <nav aria-label="Cases" className="border-b border-line bg-sheet lg:border-r lg:border-b-0">
+        <nav aria-label="Cases" className="glass border-b border-white/60 lg:border-r lg:border-b-0">
           <dl className="grid grid-cols-3 gap-2 border-b border-line px-4 py-3 text-[12px] sm:px-5">
             <div>
               <dt className="text-ink-2">Stuck</dt>
@@ -602,12 +691,12 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                   type="button"
                   aria-pressed={filter === key}
                   onClick={() => setFilter(key)}
-                  className={`rounded px-2 py-1 text-[12px] ${filter === key ? "bg-ink text-sheet" : "border border-line text-ink-2 hover:border-ink"}`}
+                  className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${filter === key ? "bg-brand text-white shadow-sm" : "border border-line bg-white/60 text-ink-2 hover:border-brand"}`}
                 >
                   {label}
                 </button>
               ))}
-              <button type="button" onClick={exportCsv} disabled={cases.length === 0} className="ml-auto text-[12px] text-plan underline-offset-2 hover:underline disabled:opacity-40">
+              <button type="button" onClick={exportCsv} disabled={cases.length === 0} className="ml-auto link-action disabled:opacity-40">
                 Export CSV
               </button>
             </div>
@@ -624,7 +713,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                     onClick={() => select(c.id)}
                     aria-current={active ? "true" : undefined}
                     className={`block w-full border-l-[3px] px-4 py-3 text-left sm:px-5 ${
-                      active ? "border-ink bg-paper" : "border-transparent hover:bg-paper/60"
+                      active ? "border-brand bg-white/80 shadow-sm" : "border-transparent hover:bg-white/50"
                     }`}
                   >
                     <div className="flex items-baseline justify-between gap-2">
@@ -653,7 +742,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                 Open your first accident case with <span className="font-medium text-ink">New case</span>, or add four fictional
                 practice cases with sample carrier documents to see how the agent reads them.
               </p>
-              <button type="button" onClick={addSamples} className="mt-5 rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+              <button type="button" onClick={addSamples} className="mt-5 btn-primary px-3.5 py-2 text-sm font-medium">
                 Add practice cases
               </button>
             </div>
@@ -674,9 +763,9 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                       existing={current}
                       onSave={update}
                       label="Edit details"
-                      labelClass="rounded border border-line bg-sheet px-2.5 py-1 text-[12px] hover:border-ink"
+                      labelClass="btn-ghost"
                     />
-                    <button type="button" onClick={deleteCase} className="rounded border border-line bg-sheet px-2.5 py-1 text-[12px] text-form-red hover:border-form-red">
+                    <button type="button" onClick={deleteCase} className="btn-ghost btn-danger">
                       Delete case
                     </button>
                   </div>
@@ -709,7 +798,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
 
               <CaseSteps c={current} ledger={ledger} />
 
-              <section className="rounded-md border border-line bg-sheet p-5">
+              <section className="card p-5">
                 <BenefitBar ledger={ledger} coverage={current.primary.coverage} />
                 {ledger.visitsUntilExhaustion !== null && !ledger.exhausted && (
                   <p className="mt-3 text-[13px] text-ink-2">
@@ -721,7 +810,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
               </section>
 
               <section
-                className={`rounded-md border p-5 ${ledger.nextAction.urgent ? "border-form-red/40 bg-wash-red" : "border-line bg-sheet"}`}
+                className={`p-5 ${ledger.nextAction.urgent ? "card card-urgent" : "card"}`}
                 aria-live="polite"
               >
                 <p className="text-[12px] text-ink-2">Next step</p>
@@ -732,16 +821,16 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {ledger.nextAction.kind === "verify_claim" && (
-                    <button type="button" onClick={markVerified} className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+                    <button type="button" onClick={markVerified} className="btn-primary px-3.5 py-2 text-sm font-medium">
                       Mark claim confirmed
                     </button>
                   )}
                   {(ledger.nextAction.kind === "request_exhaustion_letter" || ledger.nextAction.kind === "request_payout_log") && (
                     <>
-                      <button type="button" onClick={() => fileInput.current?.click()} className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+                      <button type="button" onClick={() => fileInput.current?.click()} className="btn-primary px-3.5 py-2 text-sm font-medium">
                         {ledger.nextAction.kind === "request_exhaustion_letter" ? "Upload the letter" : "Upload the payout log"}
                       </button>
-                      <button type="button" onClick={() => setShowDraft((v) => !v)} className="rounded border border-ink/30 bg-sheet px-3.5 py-2 text-sm hover:border-ink">
+                      <button type="button" onClick={() => setShowDraft((v) => !v)} className="btn-secondary px-3.5 py-2 text-sm">
                         {showDraft ? "Hide request" : "Write the request to the adjuster"}
                       </button>
                     </>
@@ -750,18 +839,18 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                     <button
                       type="button"
                       onClick={() => trySample(unusedSamples[0].file)}
-                      className="rounded border border-ink/30 bg-sheet px-3.5 py-2 text-sm hover:border-ink"
+                      className="btn-secondary px-3.5 py-2 text-sm"
                     >
                       Use the sample: {unusedSamples[0].title}
                     </button>
                   )}
                   {ledger.nextAction.kind === "assemble_packet" && (
                     <>
-                      <button type="button" disabled={packet.busy} onClick={() => makePacket(false)} className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85 disabled:opacity-50">
+                      <button type="button" disabled={packet.busy} onClick={() => makePacket(false)} className="btn-primary px-3.5 py-2 text-sm font-medium disabled:opacity-50">
                         Build the packet
                       </button>
                       {connected && (
-                        <button type="button" disabled={packet.busy} onClick={() => makePacket(true)} className="rounded border border-ink/30 bg-sheet px-3.5 py-2 text-sm hover:border-ink disabled:opacity-50">
+                        <button type="button" disabled={packet.busy} onClick={() => makePacket(true)} className="btn-secondary px-3.5 py-2 text-sm disabled:opacity-50">
                           Build with an agent-written letter
                         </button>
                       )}
@@ -778,10 +867,10 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                     {packet.note && <p className="text-ink-2">{packet.note}</p>}
                     {packet.url && (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <a href={packet.url} download={packet.name} className="rounded bg-plan px-3.5 py-2 text-sm font-medium text-sheet hover:bg-plan/85">
+                        <a href={packet.url} download={packet.name} className="btn-primary btn-plan px-3.5 py-2 text-sm font-medium">
                           Download the packet (PDF)
                         </a>
-                        <button type="button" onClick={markSent} className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
+                        <button type="button" onClick={markSent} className="btn-secondary px-3.5 py-2 text-sm">
                           Mark as sent to {current.secondary.payer}
                         </button>
                       </div>
@@ -804,11 +893,14 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
               />
 
               {reading.phase !== "idle" && (
-                <section className="rounded-md border border-line bg-sheet p-5" aria-live="polite">
+                <section ref={readingCard} className="card p-5" aria-live="polite">
                   {reading.phase === "working" && (
-                    <p className="text-sm">
-                      <span className="font-medium">{reading.fileName}</span>
-                      <span className="text-ink-2">: {reading.note}</span>
+                    <p className="flex items-center gap-3 text-sm">
+                      <span className="spinner" aria-hidden />
+                      <span>
+                        <span className="font-medium">{reading.fileName}</span>
+                        <span className="text-ink-2">: {reading.note}</span>
+                      </span>
                     </p>
                   )}
                   {reading.phase === "error" && (
@@ -816,11 +908,11 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                       <p className="text-form-red">{reading.message}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {ledger.exhausted && !ledger.letterOnFile && (
-                          <button type="button" onClick={recordLetterByHand} className="rounded border border-ink/30 px-3 py-1.5 hover:border-ink">
+                          <button type="button" onClick={recordLetterByHand} className="btn-secondary px-3 py-1.5">
                             Record the exhaustion letter by hand
                           </button>
                         )}
-                        <button type="button" onClick={() => setReading({ phase: "idle" })} className="rounded border border-ink/30 px-3 py-1.5 hover:border-ink">
+                        <button type="button" onClick={() => setReading({ phase: "idle" })} className="btn-secondary px-3 py-1.5">
                           Dismiss
                         </button>
                       </div>
@@ -832,7 +924,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                 </section>
               )}
 
-              <section className="rounded-md border border-line bg-sheet">
+              <section className="card">
                 <div className="flex items-baseline justify-between px-5 pt-4 pb-3">
                   <h2 className="font-semibold">Visits</h2>
                   <span className="text-[12px] text-ink-2">
@@ -875,7 +967,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                               <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[12px] ${STATUS[l.status].cls}`}>{STATUS[l.status].label}</span>
                             </td>
                             <td className={`fig px-5 py-2 text-right text-[12px] ${open && l.daysToDeadline <= 30 ? "font-medium text-form-red" : "text-ink-2"}`}>
-                              {open ? `${l.filingDeadline} (${l.daysToDeadline}d)` : ""}
+                              {open ? `${l.filingDeadline} (${l.daysToDeadline < 0 ? `${-l.daysToDeadline}d overdue` : `${l.daysToDeadline}d left`})` : ""}
                             </td>
                           </tr>
                         );
@@ -886,14 +978,17 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
               </section>
 
               <div className="grid gap-6 md:grid-cols-2">
-                <section className="rounded-md border border-line bg-sheet p-5">
+                <section className="card p-5">
                   <div className="flex items-baseline justify-between">
                     <h2 className="font-semibold">Documents</h2>
-                    <button type="button" onClick={() => fileInput.current?.click()} className="text-[13px] text-plan underline-offset-2 hover:underline">
+                    <button type="button" onClick={() => fileInput.current?.click()} className="link-action">
                       Add a document
                     </button>
                   </div>
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => fileInput.current?.click()}
+                    disabled={reading.phase === "working"}
                     onDragOver={(e) => {
                       e.preventDefault();
                       setDragging(true);
@@ -905,13 +1000,16 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                       const f = e.dataTransfer.files?.[0];
                       if (f) void readDocument(f);
                     }}
-                    className={`mt-3 rounded border border-dashed px-3 py-4 text-center text-[13px] ${
-                      dragging ? "border-plan bg-wash-plan text-plan" : "border-ink/30 text-ink-2"
-                    }`}
+                    className={`dropzone mt-3 ${dragging ? "dropzone-over" : ""}`}
                   >
-                    Drop a carrier letter, EOB or payout log here (PDF, PNG or JPEG). You check what was read before anything
-                    is filed.
-                  </div>
+                    <span className="block text-sm font-semibold text-ink">
+                      {reading.phase === "working" ? `Reading ${reading.fileName}` : "Choose a file, or drop it here"}
+                    </span>
+                    <span className="mt-1 block text-[12px] text-ink-2">
+                      Carrier letter, EOB or payout log. PDF, PNG or JPEG, up to 10 MB. You check what was read before anything is
+                      filed.
+                    </span>
+                  </button>
                   {(unusedSamples.length > 0 || misfiled) && (
                     <div className="mt-4">
                       <p className="text-[12px] text-ink-2">Sample documents to try on this case</p>
@@ -922,10 +1020,10 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                               <span className="font-medium">{s.title}</span> <span className="text-ink-2">{s.shows}</span>
                             </span>
                             <span className="flex gap-3 text-[13px]">
-                              <button type="button" onClick={() => trySample(s.file)} className="text-plan underline-offset-2 hover:underline">
+                              <button type="button" onClick={() => trySample(s.file)} className="link-action">
                                 Read it
                               </button>
-                              <a href={`/samples/${s.file}`} download className="text-plan underline-offset-2 hover:underline">
+                              <a href={`/samples/${s.file}`} download className="link-action">
                                 Download
                               </a>
                             </span>
@@ -944,11 +1042,11 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                             {KIND_LABEL[d.kind]}, added <span className="fig">{d.addedOn}</span>
                           </div>
                           {d.sampleUrl ? (
-                            <a href={d.sampleUrl} target="_blank" rel="noreferrer" className="text-plan underline-offset-2 hover:underline">
+                            <a href={d.sampleUrl} target="_blank" rel="noreferrer" className="link-action">
                               {d.name}
                             </a>
                           ) : mode === "live" ? (
-                            <a href={`/api/documents/${encodeURIComponent(d.id)}`} className="text-plan underline-offset-2 hover:underline">
+                            <a href={`/api/documents/${encodeURIComponent(d.id)}`} className="link-action">
                               {d.name}
                             </a>
                           ) : (
@@ -960,7 +1058,7 @@ export function Workspace({ mode }: { mode: "demo" | "live" }) {
                   )}
                 </section>
 
-                <section className="rounded-md border border-line bg-sheet p-5">
+                <section className="card p-5">
                   <h2 className="font-semibold">Activity</h2>
                   <ol className="mt-3 space-y-3 text-sm">
                     {[...current.timeline].reverse().map((t) => (
@@ -1010,7 +1108,7 @@ function ReviewCard({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-semibold">Check what was read from {reading.fileName}</h2>
         <span className="text-[12px] text-ink-2">
-          {reading.sample ? "Sample reading, agent not connected" : `Agent confidence: ${ex.confidence}`}
+          {reading.sample ? "Stored sample reading" : `Agent confidence: ${ex.confidence}`}
         </span>
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
@@ -1036,11 +1134,11 @@ function ReviewCard({
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         {!blocked && (
-          <button type="button" onClick={onApprove} className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+          <button type="button" onClick={onApprove} className="btn-primary px-3.5 py-2 text-sm font-medium">
             Approve and file
           </button>
         )}
-        <button type="button" onClick={onDiscard} className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
+        <button type="button" onClick={onDiscard} className="btn-secondary px-3.5 py-2 text-sm">
           Discard
         </button>
       </div>
@@ -1069,7 +1167,7 @@ function RequestDraft({ c, kind }: { c: AccidentCase; kind: "request_exhaustion_
             setCopied(false);
           }
         }}
-        className="mt-3 rounded border border-ink/30 px-3 py-1.5 text-sm hover:border-ink"
+        className="mt-3 btn-secondary px-3 py-1.5 text-sm"
       >
         {copied ? "Copied" : "Copy request"}
       </button>

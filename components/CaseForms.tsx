@@ -35,7 +35,7 @@ export function CaseDialog({
       <button type="button" onClick={() => dialog.current?.showModal()} className={labelClass}>
         {label}
       </button>
-      <dialog ref={dialog} className="m-auto max-h-[90vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-line bg-sheet p-0 text-ink backdrop:bg-ink/40">
+      <dialog ref={dialog} className="m-auto max-h-[90vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto card p-0 text-ink backdrop:bg-ink/40">
         <form
           className="p-6"
           onSubmit={(ev) => {
@@ -152,10 +152,10 @@ export function CaseDialog({
             </p>
           )}
           <div className="mt-5 flex gap-2">
-            <button type="submit" className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+            <button type="submit" className="btn-primary px-3.5 py-2 text-sm font-medium">
               {e ? "Save details" : "Open case"}
             </button>
-            <button type="button" onClick={() => dialog.current?.close()} className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
+            <button type="button" onClick={() => dialog.current?.close()} className="btn-secondary px-3.5 py-2 text-sm">
               Cancel
             </button>
           </div>
@@ -180,7 +180,7 @@ export function RecordPayment({
   const unpaid = ledger.lines.filter((l) => l.primaryPaidCents === 0);
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-[13px] text-plan underline-offset-2 hover:underline">
+      <button type="button" onClick={() => setOpen(true)} className="link-action">
         Record a carrier payment
       </button>
     );
@@ -226,10 +226,10 @@ export function RecordPayment({
         Other provider (if chosen)
         <input name="payee" placeholder="Emergency department" className={field} />
       </label>
-      <button type="submit" className="rounded bg-ink px-3.5 py-2 text-sm font-medium text-sheet hover:bg-ink/85">
+      <button type="submit" className="btn-primary px-3.5 py-2 text-sm font-medium">
         Record payment
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="rounded border border-ink/30 px-3.5 py-2 text-sm hover:border-ink">
+      <button type="button" onClick={() => setOpen(false)} className="btn-secondary px-3.5 py-2 text-sm">
         Cancel
       </button>
       {error && (

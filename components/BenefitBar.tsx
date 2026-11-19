@@ -30,7 +30,7 @@ export function BenefitBar({ ledger, coverage, compact = false }: { ledger: Ledg
   return (
     <div>
       <div role="img" aria-label={summary} className={`relative ${compact ? "h-2.5" : "h-9"}`}>
-        <div className="absolute inset-0 flex overflow-hidden rounded-[3px] border border-ink/70 bg-sheet">
+        <div className="absolute inset-0 flex overflow-hidden rounded-md border border-ink/60 bg-sheet">
           {[...inside, ...outside].map((s) =>
             s.cents > 0 ? (
               <div

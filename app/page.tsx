@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BenefitBar } from "@/components/BenefitBar";
 import { computeLedger, formatUsd } from "@/lib/ledger.ts";
 import { DEMO_TODAY, SAMPLE_CASES } from "@/lib/sample-cases.ts";
+import { Logo } from "@/components/Logo";
 
 const STEPS = [
   {
@@ -30,7 +31,7 @@ export default function Home() {
     <>
       <header className="mx-auto flex w-full max-w-5xl items-center gap-4 px-5 py-5 sm:px-8">
         <p className="text-[17px] font-bold tracking-tight">
-          Auto<span className="text-form-red">COB</span>
+          <Logo />
         </p>
         <nav className="ml-auto flex items-center gap-2 text-sm" aria-label="Account">
           <Link href="/demo" className="hidden px-2 py-1.5 text-ink-2 hover:text-ink sm:inline">
@@ -39,7 +40,7 @@ export default function Home() {
           <Link href="/login" className="px-2 py-1.5 text-ink-2 hover:text-ink">
             Sign in
           </Link>
-          <Link href="/signup" className="rounded bg-ink px-3.5 py-2 font-medium text-sheet hover:bg-ink/85">
+          <Link href="/signup" className="btn-primary px-3.5 py-2 font-medium">
             Create a workspace
           </Link>
         </nav>
@@ -55,15 +56,15 @@ export default function Home() {
           deadline passes.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/signup" className="rounded bg-ink px-5 py-3 text-sm font-medium text-sheet hover:bg-ink/85">
+          <Link href="/signup" className="btn-primary px-5 py-3 text-sm font-medium">
             Create a workspace
           </Link>
-          <Link href="/demo" className="rounded border border-ink/30 bg-sheet px-5 py-3 text-sm hover:border-ink">
+          <Link href="/demo" className="btn-secondary px-5 py-3 text-sm">
             Try the demo, no sign-up
           </Link>
         </div>
 
-        <section className="mt-12 rounded-md border border-line bg-sheet p-5 sm:p-7" aria-label="Example case">
+        <section className="mt-12 card p-5 sm:p-7" aria-label="Example case">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="font-semibold">
               {stuck.patient.name}, {stuck.primary.carrier}
@@ -83,14 +84,14 @@ export default function Home() {
         <section className="mt-16">
           <h2 className="text-2xl font-bold tracking-tight">Built for the people who work these claims</h2>
           <div className="mt-6 grid gap-6 sm:grid-cols-2">
-            <div className="rounded-md border border-line bg-sheet p-5">
+            <div className="card p-5">
               <h3 className="font-semibold">Accident billing companies</h3>
               <p className="mt-2 text-sm text-ink-2">
                 You work PIP, MedPay and workers&apos; comp claims for several clinics. One worklist shows every case that needs a
                 payout log, a letter or a packet today, with the money at stake beside it.
               </p>
             </div>
-            <div className="rounded-md border border-line bg-sheet p-5">
+            <div className="card p-5">
               <h3 className="font-semibold">Multi-location clinic groups</h3>
               <p className="mt-2 text-sm text-ink-2">
                 Physical therapy, orthopedic and chiropractic groups with a central billing office. Your accident specialist
@@ -139,7 +140,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="mt-16 rounded-md border border-line bg-sheet p-5 sm:p-7">
+        <section className="mt-16 card p-5 sm:p-7">
           <h2 className="text-xl font-bold tracking-tight">Early access: what to know before you start</h2>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-ink-2">
             <li>
@@ -149,7 +150,7 @@ export default function Home() {
             <li>AutoCOB reads documents and drafts letters. It does not phone adjusters or log in to carrier portals.</li>
             <li>It works beside your billing system. There is no claims-system integration yet; the worklist exports to CSV.</li>
           </ul>
-          <Link href="/signup" className="mt-6 inline-block rounded bg-ink px-5 py-3 text-sm font-medium text-sheet hover:bg-ink/85">
+          <Link href="/signup" className="mt-6 inline-block btn-primary px-5 py-3 text-sm font-medium">
             Create a workspace
           </Link>
         </section>
