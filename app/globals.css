@@ -1,26 +1,68 @@
 @import "tailwindcss";
 
+/* Palette taken from the paperwork itself: cool claim-form stock, filing ink, and the red
+   drop-out ink health claim forms are printed in. Red means money that cannot move. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --paper: #f1f3f6;
+  --sheet: #ffffff;
+  --ink: #13202c;
+  --ink-2: #51606e;
+  --line: #d6dce2;
+  --form-red: #c4122f;
+  --wash-red: #fbecee;
+  --paid: #1c7557;
+  --wash-paid: #e7f2ed;
+  --wait: #9a5f0c;
+  --wash-wait: #faf1df;
+  --plan: #1d5c8a;
+  --wash-plan: #e6eff6;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-form-red: var(--form-red);
+  --color-wash-red: var(--wash-red);
+  --color-paid: var(--paid);
+  --color-wash-paid: var(--wash-paid);
+  --color-wait: var(--wait);
+  --color-wash-wait: var(--wash-wait);
+  --color-plan: var(--plan);
+  --color-wash-plan: var(--wash-plan);
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-figures), ui-monospace, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Figures line up in columns everywhere money or a claim number appears. */
+.fig {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.hatch-ink {
+  background-image: repeating-linear-gradient(135deg, var(--ink-2) 0 2px, transparent 2px 6px);
+  background-color: #e3e7ec;
+}
+.hatch-red {
+  background-image: repeating-linear-gradient(135deg, var(--form-red) 0 2px, transparent 2px 6px);
+  background-color: var(--wash-red);
+}
+.hatch-wait {
+  background-image: repeating-linear-gradient(135deg, var(--wait) 0 2px, transparent 2px 6px);
+  background-color: var(--wash-wait);
+}
+
+:focus-visible {
+  outline: 2px solid var(--plan);
+  outline-offset: 2px;
 }

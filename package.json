@@ -6,12 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "connect": "node scripts/connect.ts",
+    "test": "node --test lib/ledger.test.ts lib/apply.test.ts && node scripts/check-packet.ts"
   },
   "dependencies": {
     "next": "16.4.6",
+    "pdf-lib": "^1.17.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",

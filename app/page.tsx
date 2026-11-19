@@ -1,69 +1,77 @@
-import Image from "next/image";
+import Link from "next/link";
+import { BenefitBar } from "@/components/BenefitBar";
+import { computeLedger, formatUsd } from "@/lib/ledger.ts";
+import { DEMO_TODAY, SAMPLE_CASES } from "@/lib/sample-cases.ts";
 
 export default function Home() {
+  const stuck = SAMPLE_CASES[0];
+  const ledger = computeLedger(stuck, DEMO_TODAY);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10 sm:px-8 sm:py-16">
+      <p className="text-[17px] font-bold tracking-tight">
+        Auto<span className="text-form-red">COB</span>
+      </p>
+
+      <h1 className="mt-10 max-w-3xl text-4xl leading-[1.08] font-bold tracking-tight sm:text-6xl">
+        The auto policy ran out on visit 14. The health plan still doesn&apos;t know.
+      </h1>
+      <p className="mt-6 max-w-2xl text-lg text-ink-2">
+        After a car accident, auto insurance pays the clinic first, up to a limit. The health plan pays only after that limit is
+        used up, and only with the carrier&apos;s letter proving it. AutoCOB keeps count, chases the letter, and builds the
+        packet.
+      </p>
+
+      <section className="mt-12 rounded-md border border-line bg-sheet p-5 sm:p-7" aria-label="Example case">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-semibold">
+            {stuck.patient.name}, {stuck.primary.carrier}
+          </p>
+          <p className="text-[12px] text-ink-2">Sample case, fictional data</p>
+        </div>
+        <div className="mt-5">
+          <BenefitBar ledger={ledger} coverage={stuck.primary.coverage} />
+        </div>
+        <p className="mt-5 max-w-2xl text-sm">
+          Four visits sit past the line. <span className="fig font-medium text-form-red">{formatUsd(ledger.blockedCents)}</span>{" "}
+          cannot be billed to the health plan until {stuck.primary.carrier} confirms in writing that the benefit is gone.
+        </p>
+        <Link
+          href="/workspace"
+          className="mt-6 inline-block rounded bg-ink px-5 py-3 text-sm font-medium text-sheet hover:bg-ink/85"
+        >
+          Open the demo workspace
+        </Link>
+      </section>
+
+      <section className="mt-14 grid gap-8 sm:grid-cols-3">
+        <div>
+          <h2 className="font-semibold">Counts every dollar against the limit</h2>
+          <p className="mt-2 text-sm text-ink-2">
+            The emergency room and imaging center draw on the same benefit. The ledger includes their payments, so the clinic
+            sees the real balance and the visit it will run out on.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div>
+          <h2 className="font-semibold">Reads what the carrier sends</h2>
+          <p className="mt-2 text-sm text-ink-2">
+            Upload an EOB, payout log or exhaustion letter. A case agent extracts the figures, checks them against the claim, and
+            shows staff exactly what will change before anything is filed.
+          </p>
         </div>
-      </main>
-    </div>
+        <div>
+          <h2 className="font-semibold">Builds the secondary packet</h2>
+          <p className="mt-2 text-sm text-ink-2">
+            One PDF: cover letter, visit ledger, the exhaustion letter and the carrier&apos;s payment record, ready to send before
+            the filing deadline.
+          </p>
+        </div>
+      </section>
+
+      <footer className="mt-16 border-t border-line pt-5 text-[12px] text-ink-2">
+        Built for The Big Hack Game. The case agent runs on HarnessRouter. Money math is done in code, never by a model. This
+        demo uses fictional data and is not for real patient records.
+      </footer>
+    </main>
   );
 }
