@@ -1,0 +1,10 @@
+AutoCOB: accident billing that knows when the auto policy runs out.
+
+After a car accident, auto insurance pays the clinic first, up to a limit. The health plan pays only once the carrier confirms in writing that the limit is gone. Clinics track that by hand and write off visits when they miss the filing deadline.
+
+AutoCOB keeps a running ledger of each patient's benefit, has a case agent read the carrier's EOBs, payout logs and letters, and builds the packet the health plan needs. Staff approve every change. Money math is done in code.
+
+Try it: https://autocob.vercel.app
+Built on HarnessRouter for The Big Hack Game.
+
+#HarnessRouter #UHP #BigHackGame #BeatStanford
