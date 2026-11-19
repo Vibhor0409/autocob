@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# video project caches and renders
+brag-output/composition/.hyperframes/
+brag-output/composition/node_modules/
+brag-output/render.log
+brag-output/brag-raw.mp4
+.playwright-mcp/

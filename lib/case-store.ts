@@ -80,6 +80,9 @@ export function liveStore(): CaseStore {
   const versions = new Map<string, number>();
   // Saves for one case run one after another, so a slow save cannot be overtaken by the next.
   const queues = new Map<string, Promise<unknown>>();
+  // Files added in this session are kept here too, so a packet built straight after approving a
+  // document does not have to wait for the upload to finish.
+  const local = new Map<string, Uint8Array>();
 
   async function load(): Promise<AccidentCase[]> {
     const { body } = await api<{ cases?: Array<{ case: AccidentCase; version: number }> }>("/api/cases");
@@ -130,6 +133,7 @@ export function liveStore(): CaseStore {
       versions.delete(id);
     },
     async putFile(caseId, docId, file) {
+      local.set(docId, new Uint8Array(await file.arrayBuffer()));
       const form = new FormData();
       form.set("file", file);
       form.set("docId", docId);
@@ -140,6 +144,8 @@ export function liveStore(): CaseStore {
     },
     async getFile(doc) {
       if (doc.sampleUrl) return fromSample(doc);
+      const held = local.get(doc.id);
+      if (held) return held;
       const res = await fetch(`/api/documents/${encodeURIComponent(doc.id)}`, { cache: "no-store" });
       return res.ok ? new Uint8Array(await res.arrayBuffer()) : null;
     },
