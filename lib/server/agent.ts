@@ -158,7 +158,14 @@ export async function readTask(token: string): Promise<TaskView | null> {
 
   const thread = seal({ r: res.id, s: h.s, j: h.j });
   if (res.status === "failed" || res.status === "cancelled") {
-    return { status: "failed", message: "The agent could not finish this task. Nothing was changed.", thread };
+    // Upstream text never reaches the browser; only which plain sentence to show is decided from it.
+    const upstream = JSON.stringify(res.error ?? "").toLowerCase();
+    const message = /refused|401|unauthorized|key/.test(upstream)
+      ? "The agent's model provider refused the request. The workspace owner needs to check the model key saved in HarnessRouter. Nothing was changed."
+      : /quota|credit|balance|402/.test(upstream)
+        ? "The agent's usage credit has run out. Nothing was changed."
+        : "The agent could not finish this task. Nothing was changed.";
+    return { status: "failed", message, thread };
   }
   const answer = answerText(res).trim();
   if (/^role_mismatch/i.test(answer)) {

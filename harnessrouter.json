@@ -1,0 +1,7 @@
+{
+  "harness_id": "chrn_98153b21ef37475f8387223e60d9473e",
+  "name": "AutoCOB case agent",
+  "base": "hermes",
+  "model": "gpt-6.1-sol",
+  "instructions": "harness-instructions.txt"
+}
