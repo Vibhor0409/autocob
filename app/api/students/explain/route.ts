@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 // Server-side only: the Vercel AI Gateway key never reaches the browser.
 export async function POST(req: Request) {
-  const key = process.env.AI_GATEWAY_API_KEY;
+  // Event key if set; otherwise Vercel's own OIDC token, which AI Gateway accepts on Vercel deployments.
+  const key = process.env.AI_GATEWAY_API_KEY || req.headers.get("x-vercel-oidc-token") || process.env.VERCEL_OIDC_TOKEN;
   if (!key) return NextResponse.json({ error: "AI explanation is not configured" }, { status: 503 });
   const { question, plan } = (await req.json()) as { question?: string; plan?: unknown };
   if (!question || question.length > 600) return NextResponse.json({ error: "Ask a short question" }, { status: 400 });
