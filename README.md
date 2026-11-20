@@ -4,6 +4,32 @@ Accident billing for outpatient clinics. After a car accident or workplace injur
 
 Built for The Big Hack Game (Stanford vs Berkeley). The case agent runs on HarnessRouter.
 
+## Berkeley Startup Sprint (Nov 20, 2026): AutoCOB for Students
+
+**Team Vikings** · Vibhor Agrawal (solo) · Challenge area: student and community needs.
+**Live:** https://autocob.vercel.app/students (no login needed).
+
+**User and problem.** A college student hurt in a car accident gets bills from the ambulance, the ER and physical therapy, and nobody tells them who should pay. Car insurance, their student health plan (for example UC SHIP), a parent's plan and the other driver's insurer each pay in a set order that depends on the state. Get the order wrong and the bill lands on the student or goes to collections.
+
+**What it does.**
+1. Six questions: state, your role in the crash, household car insurance, MedPay, fault, and health coverage.
+2. It shows who pays, in order, with what each payer covers and what you should do (for example, ask for the PIP exhaustion letter).
+3. A checklist of documents to gather.
+4. A ready-to-copy message for the billing office that asks them to bill in the right order and hold the account.
+5. "Ask AutoCOB": plain-language answers through **Vercel AI Gateway**, called only from the server and grounded in the student's plan.
+6. "Hear my plan": reads the plan aloud with **ElevenLabs** text-to-speech, from the server. It falls back to the browser's voice if no key is set.
+
+**Built today:** `app/students/` (rules engine and UI), `app/api/students/explain` (AI Gateway) and `app/api/students/speak` (ElevenLabs).
+**Pre-existing work:** the AutoCOB biller product (clinic workspace, HarnessRouter case agent, packet builder), built earlier this week for The Big Hack Game. Tools: Next.js on Vercel and Claude Code for coding help.
+
+**Research finding.** Cold emails to 21+ accident billing firms this week showed the gap: many billing firms don't handle car accident claims at all, and the ones that do chase "exhaustion letters" by hand. If professional billers struggle with this step, a student with no help stands even less chance.
+**Technical tradeoff.** The payer order is a deterministic rules engine, not an LLM. Dollar limits and payer order must never be made up, so the AI only explains the plan the rules produced. That gives up flexibility for states outside NY, NJ, FL, MI and CA (shown as general guidance) in exchange for answers that can be checked.
+**ElevenLabs award:** entering, with "Hear my plan" text-to-speech for students who would rather listen than read a wall of insurance terms.
+
+**Run locally:** `npm install && npm run dev`, then open `/students`. Optional server secrets: `AI_GATEWAY_API_KEY` and `ELEVENLABS_API_KEY`.
+
+**Limits.** General information, not legal advice. State rules cover NY, NJ, FL, MI and CA; other states get general guidance. Nothing is stored.
+
 ## Who it is for
 
 The billing specialist at a physical therapy, chiropractic, orthopedic or urgent care clinic, or at a billing agency working for those clinics. They handle the accident cases by hand today, with a spreadsheet per patient and phone calls to adjusters.

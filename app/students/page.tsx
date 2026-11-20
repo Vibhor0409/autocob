@@ -51,6 +51,29 @@ export default function StudentsPage() {
   const [answer, setAnswer] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+
+  async function listen() {
+    const text = `${plan.headline} ${plan.steps.map((s, i) => `Step ${i + 1}: ${s.who}. ${s.youDo}`).join(" ")}`;
+    setSpeaking(true);
+    try {
+      const r = await fetch("/api/students/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!r.ok) throw new Error("offline");
+      const url = URL.createObjectURL(await r.blob());
+      const audio = new Audio(url);
+      audio.onended = () => setSpeaking(false);
+      await audio.play();
+    } catch {
+      // Fallback when ElevenLabs is not configured: the browser's own voice.
+      const u = new SpeechSynthesisUtterance(text);
+      u.onend = () => setSpeaking(false);
+      window.speechSynthesis?.speak(u);
+    }
+  }
   const plan = useMemo(() => buildPlan(a), [a]);
   const letter = useMemo(() => buildLetter(a, plan, name), [a, plan, name]);
   const set = <K extends keyof Answers>(k: K) => (v: Answers[K]) => setA((s) => ({ ...s, [k]: v }));
@@ -109,7 +132,15 @@ export default function StudentsPage() {
           <section style={{ display: "grid", gap: 20 }} aria-label="Who pays">
             <div style={{ ...card, background: "#14213d", color: "#f2f4f1", border: "none" }}>
               <p style={{ fontSize: 13, letterSpacing: 2, color: "#6fd0c2", margin: "0 0 6px", fontWeight: 700 }}>WHO PAYS, IN ORDER</p>
-              <h2 style={{ fontSize: 22, margin: "0 0 16px", lineHeight: 1.3 }}>{plan.headline}</h2>
+              <h2 style={{ fontSize: 22, margin: "0 0 12px", lineHeight: 1.3 }}>{plan.headline}</h2>
+              <button
+                type="button"
+                onClick={listen}
+                disabled={speaking}
+                style={{ margin: "0 0 16px", padding: "8px 14px", borderRadius: 999, border: "1px solid #6fd0c2", background: "transparent", color: "#6fd0c2", fontWeight: 600, cursor: "pointer" }}
+              >
+                {speaking ? "Playing..." : "🔊 Hear my plan (ElevenLabs)"}
+              </button>
               <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 14 }}>
                 {plan.steps.map((s, i) => (
                   <li key={i} style={{ display: "flex", gap: 14 }}>
