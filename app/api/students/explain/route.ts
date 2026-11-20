@@ -24,7 +24,10 @@ export async function POST(req: Request) {
       ],
     }),
   });
-  if (!res.ok) return NextResponse.json({ error: "The AI service did not answer" }, { status: 502 });
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    return NextResponse.json({ error: "The AI service did not answer", status: res.status, detail }, { status: 502 });
+  }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   return NextResponse.json({ answer: data.choices?.[0]?.message?.content ?? "" });
 }
